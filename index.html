@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pixbob Cutout - Background Remover</title>
+<!-- Favicon SVG Embedded -->
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23151815'/><path d='M8 8h16v16H8z' fill='%23262c26'/><path d='M12 12h8v8h-8z' fill='%23c9ff5a'/></svg>">
+<style>
+  :root{
+    --bg:#0d0f0d;
+    --panel:#151815;
+    --line:#262c26;
+    --accent:#c9ff5a;
+    --accent-dim:#8fb83f;
+    --text:#eef0ea;
+    --text-dim:#8a9086;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    min-height:100vh;
+    background:var(--bg);
+    color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    padding:32px 20px 40px;
+  }
+  .eyebrow{
+    font-size:12px;
+    letter-spacing:.14em;
+    text-transform:uppercase;
+    color:var(--accent-dim);
+    margin-bottom:6px;
+  }
+  h1{
+    font-size:26px;
+    font-weight:600;
+    margin:0 0 4px;
+    letter-spacing:-0.01em;
+  }
+  p.sub{
+    color:var(--text-dim);
+    font-size:13px;
+    margin:0 0 24px;
+    text-align:center;
+    max-width:460px;
+  }
+  .stage{
+    width:100%;
+    max-width:960px;
+    position:relative;
+    border-radius:14px;
+    transition:outline .15s ease, background-color .15s ease;
+  }
+  .stage.drag-active{
+    outline:2px dashed var(--accent);
+    outline-offset:8px;
+  }
+  .dropzone{
+    position:relative;
+    border:1px dashed var(--line);
+    border-radius:14px;
+    background:var(--panel);
+    min-height:360px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    text-align:center;
+    padding:32px;
+    cursor:pointer;
+    transition:border-color .15s ease;
+  }
+  .dropzone:hover, .dropzone.drag{
+    border-color:var(--accent-dim);
+  }
+  .dropzone svg{
+    width:38px;height:38px;
+    stroke:var(--text-dim);
+    margin-bottom:16px;
+  }
+  .dropzone .main{font-size:15px;color:var(--text);margin-bottom:4px;}
+  .dropzone .hint{font-size:13px;color:var(--text-dim);}
+  input[type=file]{display:none;}
+
+  .checker{
+    background-image:
+      linear-gradient(45deg,#2a2e2a 25%,transparent 25%),
+      linear-gradient(-45deg,#2a2e2a 25%,transparent 25%),
+      linear-gradient(45deg,transparent 75%,#2a2e2a 75%),
+      linear-gradient(-45deg,transparent 75%,#2a2e2a 75%);
+    background-size:20px 20px;
+    background-position:0 0,0 10px,10px -10px,-10px 0px;
+    background-color:#1d211d;
+    border-radius:12px;
+    overflow:hidden;
+    border:1px solid var(--line);
+  }
+
+  .result-wrap{display:none;}
+  .result-wrap.show{
+    display:flex;
+    flex-direction:column;
+    gap:12px;
+  }
+  .previewToggle{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    font-size:12px;
+    color:var(--text-dim);
+    cursor:pointer;
+  }
+  .switch{position:relative;display:inline-block;width:30px;height:17px;flex:none;}
+  .switch input{position:absolute;inset:0;margin:0;opacity:0;cursor:pointer;z-index:1;}
+  .switch .track{position:absolute;inset:0;background:var(--line);border-radius:999px;transition:.15s;}
+  .switch .thumb{
+    position:absolute;top:2px;left:2px;
+    width:13px;height:13px;
+    background:#fff;border-radius:50%;
+    transition:.15s;
+  }
+  .switch input:checked ~ .track{background:var(--accent-dim);}
+  .switch input:checked ~ .thumb{transform:translateX(13px);}
+
+  .editor-grid{
+    display:grid;
+    grid-template-columns:160px 1fr 180px;
+    gap:16px;
+    align-items:start;
+  }
+  @media (max-width: 800px){
+    .editor-grid{
+      grid-template-columns:1fr;
+    }
+  }
+
+  .panel-box{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:14px;
+    display:flex;
+    flex-direction:column;
+    gap:12px;
+  }
+  .panel-title{
+    font-size:11px;
+    font-weight:600;
+    text-transform:uppercase;
+    letter-spacing:.08em;
+    color:var(--text-dim);
+  }
+
+  .compare, .simple-preview{
+    position:relative;
+    width:100%;
+    height:380px;
+    max-height:60vh;
+  }
+
+  .compare{
+    --pos:50%;
+    user-select:none;
+    touch-action:none;
+    cursor:ew-resize;
+  }
+  .compare img{
+    position:absolute;
+    inset:0;
+    width:100%;
+    height:100%;
+    object-fit:contain;
+    display:block;
+    pointer-events:none;
+  }
+  .before-clip{
+    position:absolute;
+    inset:0;
+    clip-path:inset(0 0 0 var(--pos));
+  }
+  .after-clip{
+    position:absolute;
+    inset:0;
+    clip-path:inset(0 calc(100% - var(--pos)) 0 0);
+  }
+  .handle{
+    position:absolute;
+    top:0;bottom:0;
+    width:2px;
+    background:var(--accent);
+    left:var(--pos);
+    transform:translateX(-50%);
+    cursor:ew-resize;
+  }
+  .handle::after{
+    content:'';
+    position:absolute;
+    top:50%;left:50%;
+    transform:translate(-50%,-50%);
+    width:26px;height:26px;
+    border-radius:50%;
+    background:var(--accent);
+  }
+  .handle::before{
+    content:'‹›';
+    position:absolute;
+    top:50%;left:50%;
+    transform:translate(-50%,-52%);
+    font-size:11px;
+    color:#111;
+    z-index:1;
+    font-family:inherit;
+  }
+  .tag{
+    position:absolute;
+    font-size:10px;
+    padding:3px 7px;
+    border-radius:4px;
+    background:rgba(0,0,0,.65);
+    color:#fff;
+    pointer-events:none;
+  }
+  .tag-before{bottom:8px;right:8px;}
+  .tag-after{top:8px;left:8px;}
+
+  .simple-preview{
+    display:none;
+    align-items:center;
+    justify-content:center;
+  }
+  .simple-preview img{
+    max-width:100%;
+    max-height:100%;
+    object-fit:contain;
+    display:block;
+  }
+
+  .swatches{
+    display:grid;
+    grid-template-columns:repeat(3, 1fr);
+    gap:8px;
+  }
+  .swatch{
+    width:100%;
+    aspect-ratio:1;
+    border-radius:8px;
+    border:1px solid var(--line);
+    cursor:pointer;
+    padding:0;
+    background-color:transparent;
+  }
+  .swatch.active{box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--accent);}
+  .swatch.transparent-swatch{
+    background-image:
+      linear-gradient(45deg,#2a2e2a 25%,transparent 25%),
+      linear-gradient(-45deg,#2a2e2a 25%,transparent 25%),
+      linear-gradient(45deg,transparent 75%,#2a2e2a 75%),
+      linear-gradient(-45deg,transparent 75%,#2a2e2a 75%);
+    background-size:10px 10px;
+    background-position:0 0,0 5px,5px -5px,-5px 0px;
+    background-color:#1d211d;
+  }
+  input[type=color]{
+    width:100%;
+    aspect-ratio:1;
+    padding:0;
+    border:1px solid var(--line);
+    border-radius:8px;
+    overflow:hidden;
+    background:none;
+    cursor:pointer;
+  }
+  input[type=color]::-webkit-color-swatch-wrapper{padding:0;}
+  input[type=color]::-webkit-color-swatch{border:none;border-radius:8px;}
+  .upload-swatch{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background:var(--bg);
+    color:var(--text-dim);
+  }
+  .upload-swatch svg{width:16px;height:16px;stroke:currentColor;}
+
+  .queue-wrap{display:none;margin-bottom:12px;}
+  .queue-wrap.show{display:block;}
+  .qcount{font-size:12px;color:var(--text-dim);margin-bottom:6px;}
+  .queue{
+    display:grid;
+    grid-template-columns:repeat(auto-fill,minmax(50px,1fr));
+    gap:8px;
+  }
+  .qitem{
+    position:relative;
+    aspect-ratio:1;
+    border-radius:8px;
+    overflow:hidden;
+    border:1px solid var(--line);
+    padding:0;
+    cursor:pointer;
+    background:var(--panel);
+  }
+  .qitem.active{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent);}
+  .qitem img{width:100%;height:100%;object-fit:cover;display:block;}
+  .qbadge{
+    position:absolute;inset:0;
+    display:flex;align-items:center;justify-content:center;
+    background:rgba(0,0,0,.4);
+  }
+  .qspin{
+    width:14px;height:14px;border-radius:50%;
+    border:2px solid rgba(255,255,255,.3);
+    border-top-color:#fff;
+    animation:spin .8s linear infinite;
+  }
+  .qbadge-error{background:rgba(120,20,20,.6);color:#fff;font-size:14px;font-weight:600;}
+
+  .status{
+    display:none;
+    align-items:center;
+    justify-content:center;
+    flex-direction:column;
+    gap:14px;
+    min-height:360px;
+  }
+  .status.show{display:flex;}
+  .ring{
+    width:34px;height:34px;
+    border-radius:50%;
+    border:2px solid var(--line);
+    border-top-color:var(--accent);
+    animation:spin .8s linear infinite;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .status .label{font-size:13px;color:var(--text-dim);}
+  .status .bar{
+    width:180px;height:3px;background:var(--line);border-radius:2px;overflow:hidden;
+  }
+  .status .bar .fill{
+    height:100%;width:0%;background:var(--accent);transition:width .2s ease;
+  }
+
+  .actions-panel{
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+  }
+  button{
+    font-family:inherit;
+    font-size:13px;
+    font-weight:500;
+    padding:10px 14px;
+    border-radius:8px;
+    border:1px solid var(--line);
+    background:transparent;
+    color:var(--text);
+    cursor:pointer;
+    transition:.15s ease;
+    width:100%;
+    text-align:center;
+  }
+  button:hover{border-color:var(--accent-dim);}
+  button.primary{
+    background:var(--accent);
+    color:#111;
+    border-color:var(--accent);
+  }
+  button.primary:hover{background:var(--accent-dim);border-color:var(--accent-dim);}
+  button:disabled{opacity:.4;cursor:not-allowed;}
+
+  .error{
+    display:none;
+    margin-top:12px;
+    padding:10px 12px;
+    border-radius:8px;
+    background:#2a1616;
+    border:1px solid #4a2323;
+    color:#f0a8a8;
+    font-size:12px;
+  }
+  .error.show{display:block;}
+
+  footer{
+    margin-top:32px;
+    font-size:12px;
+    color:var(--text-dim);
+    text-align:center;
+    max-width:480px;
+  }
+</style>
+</head>
+<body>
+
+  <div class="eyebrow">Pixbob Cutout</div>
+  <h1>Background Remover</h1>
+  <p class="sub">Runs 100% locally in your browser — your images are never uploaded to any server.</p>
+
+  <div class="stage" id="stage">
+    <div id="dropzone" class="dropzone checker">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/><polyline points="7 9 12 4 17 9"/><line x1="12" y1="4" x2="12" y2="16"/></svg>
+      <div class="main">Click to choose image, drag & drop here, or paste (Ctrl+V)</div>
+      <div class="hint">JPG or PNG — supports batch uploading</div>
+    </div>
+
+    <div id="queueSection" class="queue-wrap">
+      <div id="qcount" class="qcount"></div>
+      <div id="queueGrid" class="queue"></div>
+    </div>
+
+    <div id="status" class="checker status">
+      <div class="ring"></div>
+      <div class="label" id="statusLabel">Loading AI model…</div>
+      <div class="bar"><div class="fill" id="statusFill"></div></div>
+    </div>
+
+    <div id="resultWrap" class="result-wrap">
+      <label class="previewToggle">
+        <span class="switch">
+          <input type="checkbox" id="previewToggle" checked>
+          <span class="track"></span>
+          <span class="thumb"></span>
+        </span>
+        Comparison preview (drag slider)
+      </label>
+
+      <div class="editor-grid">
+        <!-- Left Panel: Color / BG Options -->
+        <div class="panel-box">
+          <div class="panel-title">Background</div>
+          <div class="swatches" id="swatches">
+            <button class="swatch transparent-swatch active" data-bg="transparent" title="Transparent" aria-label="Transparent"></button>
+            <button class="swatch" data-bg="#ffffff" style="background:#ffffff" title="White" aria-label="White"></button>
+            <button class="swatch" data-bg="#ff0000" style="background:#ff0000" title="Red" aria-label="Red"></button>
+            <button class="swatch" data-bg="#101010" style="background:#101010" title="Black" aria-label="Black"></button>
+            <button class="swatch" data-bg="#c9ff5a" style="background:#c9ff5a" title="Accent" aria-label="Accent"></button>
+            <button class="swatch" data-bg="#3378dd" style="background:#3378dd" title="Blue" aria-label="Blue"></button>
+            <input type="color" id="colorPicker" value="#dd7733" title="Custom color">
+            <button class="swatch upload-swatch" id="uploadBgBtn" title="Upload custom background" aria-label="Upload custom background">
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/><polyline points="7 9 12 4 17 9"/><line x1="12" y1="4" x2="12" y2="16"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Middle: Main Preview -->
+        <div>
+          <div id="compare" class="compare checker">
+            <div id="beforeClip" class="before-clip">
+              <img id="beforeImg" alt="Original photo">
+            </div>
+            <div id="afterClip" class="after-clip">
+              <img id="afterImg" alt="Result without background">
+            </div>
+            <div id="handle" class="handle"></div>
+            <span class="tag tag-after">Result</span>
+            <span class="tag tag-before">Original</span>
+          </div>
+
+          <div id="simpleView" class="simple-preview checker">
+            <img id="simpleImg" alt="Result without background">
+          </div>
+        </div>
+
+        <!-- Right Panel: Actions & Export -->
+        <div class="panel-box actions-panel">
+          <div class="panel-title">Actions</div>
+          <button id="copyBtn" class="primary">Copy Image</button>
+          <button id="downloadBtn">Download PNG</button>
+          <button id="downloadAllBtn" style="display:none;">Download All (ZIP)</button>
+          <button id="addMoreBtn">Add Photos</button>
+          <button id="resetBtn">Start Over</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="error" class="error"></div>
+  </div>
+
+  <input type="file" id="fileInput" accept="image/png, image/jpeg" multiple>
+  <input type="file" id="bgFileInput" accept="image/*" style="display:none;">
+  <canvas id="compositeCanvas" style="display:none;"></canvas>
+
+  <footer>AI model downloads once to your browser (~5s initially) and stays cached for future offline use.</footer>
+
+<script type="module">
+  const stage = document.getElementById('stage');
+  const dropzone = document.getElementById('dropzone');
+  const queueSection = document.getElementById('queueSection');
+  const qcount = document.getElementById('qcount');
+  const queueGrid = document.getElementById('queueGrid');
+  const statusEl = document.getElementById('status');
+  const statusLabel = document.getElementById('statusLabel');
+  const statusFill = document.getElementById('statusFill');
+  const resultWrap = document.getElementById('resultWrap');
+  const previewToggle = document.getElementById('previewToggle');
+  const compare = document.getElementById('compare');
+  const simpleView = document.getElementById('simpleView');
+  const simpleImg = document.getElementById('simpleImg');
+  const beforeImg = document.getElementById('beforeImg');
+  const afterImg = document.getElementById('afterImg');
+  const handle = document.getElementById('handle');
+  const errorEl = document.getElementById('error');
+  const fileInput = document.getElementById('fileInput');
+  const bgFileInput = document.getElementById('bgFileInput');
+  const uploadBgBtn = document.getElementById('uploadBgBtn');
+  const colorPicker = document.getElementById('colorPicker');
+  let swatches = document.querySelectorAll('.swatch');
+  const copyBtn = document.getElementById('copyBtn');
+  const downloadBtn = document.getElementById('downloadBtn');
+  const downloadAllBtn = document.getElementById('downloadAllBtn');
+  const addMoreBtn = document.getElementById('addMoreBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const canvas = document.getElementById('compositeCanvas');
+
+  let items = [];
+  let activeId = null;
+  let idCounter = 0;
+  let processing = false;
+  let removeBackgroundFn = null;
+
+  function escapeHtml(str){
+    return str.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function addFiles(fileList){
+    const files = Array.from(fileList).filter(f => f.type && f.type.startsWith('image/'));
+    if (files.length === 0) {
+      errorEl.textContent = 'Selected file must be an image (JPG or PNG).';
+      errorEl.classList.add('show');
+      return;
+    }
+    files.forEach(file => {
+      items.push({
+        id: ++idCounter,
+        file,
+        originalURL: URL.createObjectURL(file),
+        status: 'waiting',
+        error: null,
+        cutoutURL: null,
+        cutoutImage: null,
+        naturalW: 0,
+        naturalH: 0,
+        compositeURL: null,
+        bg: 'transparent'
+      });
+    });
+    render();
+    processQueue();
+  }
+
+  async function ensureRemoveBackground(){
+    if (!removeBackgroundFn) {
+      statusLabel.textContent = 'Loading AI library…';
+      const mod = await import("https://esm.sh/@imgly/background-removal@1.7.0");
+      removeBackgroundFn = mod.removeBackground;
+    }
+    return removeBackgroundFn;
+  }
+
+  async function processQueue(){
+    if (processing) return;
+    processing = true;
+    try {
+      const rb = await ensureRemoveBackground();
+      while (true) {
+        const item = items.find(i => i.status === 'waiting');
+        if (!item) break;
+        item.status = 'processing';
+        if (activeId === null) activeId = item.id;
+        render();
+
+        const posInQueue = items.filter(i => i.status !== 'waiting').length;
+
+        try {
+          const blob = await rb(item.file, {
+            progress: (key, current, total) => {
+              const pct = total ? Math.round((current / total) * 100) : 0;
+              statusFill.style.width = pct + '%';
+              const prefix = items.length > 1 ? `Image ${posInQueue} of ${items.length} — ` : '';
+              statusLabel.textContent = prefix + (key.includes('fetch')
+                ? `Downloading AI model… ${pct}%`
+                : `Removing background… ${pct}%`);
+            }
+          });
+          item.cutoutURL = URL.createObjectURL(blob);
+          await new Promise(resolve => {
+            const img = new Image();
+            img.onload = () => {
+              item.naturalW = img.naturalWidth;
+              item.naturalH = img.naturalHeight;
+              item.cutoutImage = img;
+              resolve();
+            };
+            img.src = item.cutoutURL;
+          });
+          item.status = 'done';
+          if (item.id === activeId) setupCompareFor(item);
+        } catch (err) {
+          console.error(err);
+          item.status = 'error';
+          item.error = err && err.message ? err.message : 'an unexpected error occurred';
+        }
+        render();
+      }
+    } finally {
+      processing = false;
+      render();
+    }
+  }
+
+  function applyPreviewMode(){
+    const on = previewToggle.checked;
+    compare.style.display = on ? '' : 'none';
+    simpleView.style.display = on ? 'none' : 'flex';
+  }
+  previewToggle.addEventListener('change', applyPreviewMode);
+
+  function setupCompareFor(item){
+    const src = item.compositeURL || item.cutoutURL;
+    beforeImg.src = item.originalURL;
+    afterImg.src = src;
+    simpleImg.src = src;
+    compare.style.setProperty('--pos', '50%');
+    swatches.forEach(s => s.classList.toggle('active', s.dataset.bg === item.bg));
+    applyPreviewMode();
+  }
+
+  function selectActive(id){
+    activeId = id;
+    const item = items.find(i => i.id === id);
+    if (item && item.status === 'done') setupCompareFor(item);
+    render();
+  }
+
+  function render(){
+    dropzone.style.display = items.length === 0 ? 'flex' : 'none';
+    queueSection.classList.toggle('show', items.length > 0);
+    qcount.textContent = items.length > 1
+      ? `${items.filter(i => i.status === 'done').length} of ${items.length} completed`
+      : '';
+
+    queueGrid.innerHTML = items.map(item => {
+      const cls = ['qitem'];
+      if (item.id === activeId) cls.push('active');
+      if (item.status === 'done') cls.push('done', 'checker');
+      const imgSrc = item.status === 'done' ? item.cutoutURL : item.originalURL;
+      const badge = item.status === 'error'
+        ? '<div class="qbadge qbadge-error">×</div>'
+        : item.status === 'done' ? '' : '<div class="qbadge"><div class="qspin"></div></div>';
+      return `<button class="${cls.join(' ')}" data-id="${item.id}" title="${escapeHtml(item.file.name)}"><img src="${imgSrc}" alt="">${badge}</button>`;
+    }).join('');
+
+    const activeItem = items.find(i => i.id === activeId) || null;
+    const showResult = !!(activeItem && activeItem.status === 'done');
+    const showStatus = items.length > 0 && !showResult;
+
+    statusEl.classList.toggle('show', showStatus);
+    resultWrap.classList.toggle('show', showResult);
+    errorEl.classList.remove('show');
+
+    if (showStatus && activeItem && activeItem.status === 'error') {
+      errorEl.textContent = 'Failed to process "' + activeItem.file.name + '": ' + activeItem.error + '.';
+      errorEl.classList.add('show');
+    } else if (showStatus && activeItem && activeItem.status === 'waiting') {
+      statusLabel.textContent = 'Waiting in queue…';
+    }
+
+    const doneCount = items.filter(i => i.status === 'done').length;
+    copyBtn.style.display = showResult ? 'block' : 'none';
+    downloadBtn.style.display = showResult ? 'block' : 'none';
+    downloadAllBtn.style.display = doneCount > 1 ? 'block' : 'none';
+  }
+
+  queueGrid.addEventListener('click', e => {
+    const btn = e.target.closest('.qitem');
+    if (!btn) return;
+    selectActive(Number(btn.dataset.id));
+  });
+
+  dropzone.addEventListener('click', () => fileInput.click());
+
+  stage.addEventListener('dragover', e => { 
+    e.preventDefault(); 
+    stage.classList.add('drag-active'); 
+  });
+  stage.addEventListener('dragleave', e => { 
+    if (!stage.contains(e.relatedTarget)) {
+      stage.classList.remove('drag-active'); 
+    }
+  });
+  stage.addEventListener('drop', e => {
+    e.preventDefault();
+    stage.classList.remove('drag-active');
+    if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
+  });
+
+  fileInput.addEventListener('change', e => {
+    if (e.target.files.length) addFiles(e.target.files);
+    fileInput.value = '';
+  });
+  addMoreBtn.addEventListener('click', () => fileInput.click());
+
+  window.addEventListener('paste', e => {
+    const clip = e.clipboardData && e.clipboardData.items;
+    if (!clip) return;
+    for (const item of clip) {
+      if (item.type && item.type.startsWith('image/')) {
+        const file = item.getAsFile();
+        if (file) addFiles([file]);
+        break;
+      }
+    }
+  });
+
+  function compositeWithColor(item, color){
+    canvas.width = item.naturalW;
+    canvas.height = item.naturalH;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, item.naturalW, item.naturalH);
+    ctx.fillStyle = color;
+    ctx.fillRect(0, 0, item.naturalW, item.naturalH);
+    ctx.drawImage(item.cutoutImage, 0, 0, item.naturalW, item.naturalH);
+    canvas.toBlob(blob => {
+      if (item.compositeURL) URL.revokeObjectURL(item.compositeURL);
+      item.compositeURL = URL.createObjectURL(blob);
+      if (item.id === activeId) { afterImg.src = item.compositeURL; simpleImg.src = item.compositeURL; }
+    }, 'image/png');
+  }
+
+  function compositeWithImage(item, bgImageEl){
+    canvas.width = item.naturalW;
+    canvas.height = item.naturalH;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, item.naturalW, item.naturalH);
+    const scale = Math.max(item.naturalW / bgImageEl.naturalWidth, item.naturalH / bgImageEl.naturalHeight);
+    const w = bgImageEl.naturalWidth * scale;
+    const h = bgImageEl.naturalHeight * scale;
+    const x = (item.naturalW - w) / 2;
+    const y = (item.naturalH - h) / 2;
+    ctx.drawImage(bgImageEl, x, y, w, h);
+    ctx.drawImage(item.cutoutImage, 0, 0, item.naturalW, item.naturalH);
+    canvas.toBlob(blob => {
+      if (item.compositeURL) URL.revokeObjectURL(item.compositeURL);
+      item.compositeURL = URL.createObjectURL(blob);
+      if (item.id === activeId) { afterImg.src = item.compositeURL; simpleImg.src = item.compositeURL; }
+    }, 'image/png');
+  }
+
+  swatches.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const item = items.find(i => i.id === activeId);
+      if (!item || item.status !== 'done') return;
+      swatches.forEach(s => s.classList.remove('active'));
+      btn.classList.add('active');
+      const bg = btn.dataset.bg;
+      item.bg = bg;
+      if (bg === 'transparent') {
+        if (item.compositeURL) { URL.revokeObjectURL(item.compositeURL); item.compositeURL = null; }
+        afterImg.src = item.cutoutURL;
+        simpleImg.src = item.cutoutURL;
+      } else {
+        compositeWithColor(item, bg);
+      }
+    });
+  });
+
+  colorPicker.addEventListener('input', e => {
+    const item = items.find(i => i.id === activeId);
+    if (!item || item.status !== 'done') return;
+    swatches.forEach(s => s.classList.remove('active'));
+    item.bg = 'custom';
+    compositeWithColor(item, e.target.value);
+  });
+
+  uploadBgBtn.addEventListener('click', () => bgFileInput.click());
+  bgFileInput.addEventListener('change', e => {
+    const item = items.find(i => i.id === activeId);
+    const f = e.target.files[0];
+    if (!f || !item || item.status !== 'done') return;
+    swatches.forEach(s => s.classList.remove('active'));
+    item.bg = 'image';
+    const url = URL.createObjectURL(f);
+    const im = new Image();
+    im.onload = () => { compositeWithImage(item, im); URL.revokeObjectURL(url); };
+    im.src = url;
+  });
+
+  let dragging = false;
+  function updatePos(clientX){
+    const rect = compare.getBoundingClientRect();
+    let x = (clientX - rect.left) / rect.width * 100;
+    x = Math.min(100, Math.max(0, x));
+    compare.style.setProperty('--pos', x + '%');
+  }
+
+  compare.addEventListener('pointerdown', e => {
+    dragging = true;
+    compare.setPointerCapture(e.pointerId);
+    updatePos(e.clientX);
+  });
+  window.addEventListener('pointermove', e => { if (dragging) updatePos(e.clientX); });
+  window.addEventListener('pointerup', e => { dragging = false; });
+
+  copyBtn.addEventListener('click', async () => {
+    const item = items.find(i => i.id === activeId);
+    if (!item || item.status !== 'done') return;
+    const url = item.compositeURL || item.cutoutURL;
+    try {
+      const response = await fetch(url);
+      const blob = await response.blob();
+      await navigator.clipboard.write([
+        new ClipboardItem({ [blob.type]: blob })
+      ]);
+      const oldText = copyBtn.textContent;
+      copyBtn.textContent = 'Copied!';
+      setTimeout(() => { copyBtn.textContent = oldText; }, 2000);
+    } catch (err) {
+      console.error('Clipboard copy failed:', err);
+      previewToggle.checked = false;
+      applyPreviewMode();
+      alert('Automatic clipboard access was blocked. The slider preview has been toggled off so you can right-click the image directly to copy.');
+    }
+  });
+
+  downloadBtn.addEventListener('click', () => {
+    const item = items.find(i => i.id === activeId);
+    if (!item || item.status !== 'done') return;
+    const a = document.createElement('a');
+    a.href = item.compositeURL || item.cutoutURL;
+    const base = item.file.name.replace(/\.[^.]+$/, '');
+    a.download = base + '-no-bg.png';
+    a.click();
+  });
+
+  downloadAllBtn.addEventListener('click', async () => {
+    const doneItems = items.filter(i => i.status === 'done');
+    if (doneItems.length === 0) return;
+    downloadAllBtn.disabled = true;
+    const originalLabel = downloadAllBtn.textContent;
+    downloadAllBtn.textContent = 'Preparing ZIP…';
+    try {
+      const { default: JSZip } = await import("https://esm.sh/jszip@3.10.1");
+      const zip = new JSZip();
+      for (const item of doneItems) {
+        const url = item.compositeURL || item.cutoutURL;
+        const blob = await (await fetch(url)).blob();
+        const base = item.file.name.replace(/\.[^.]+$/, '');
+        zip.file(base + '-no-bg.png', blob);
+      }
+      const zipBlob = await zip.generateAsync({ type: 'blob' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(zipBlob);
+      a.download = 'cutout-images.zip';
+      a.click();
+    } catch (err) {
+      console.error(err);
+      errorEl.textContent = 'Failed to create ZIP file: ' + (err && err.message ? err.message : 'unexpected error') + '.';
+      errorEl.classList.add('show');
+    } finally {
+      downloadAllBtn.disabled = false;
+      downloadAllBtn.textContent = originalLabel;
+    }
+  });
+
+  resetBtn.addEventListener('click', () => {
+    items.forEach(item => {
+      URL.revokeObjectURL(item.originalURL);
+      if (item.cutoutURL) URL.revokeObjectURL(item.cutoutURL);
+      if (item.compositeURL) URL.revokeObjectURL(item.compositeURL);
+    });
+    items = [];
+    activeId = null;
+    fileInput.value = '';
+    bgFileInput.value = '';
+    render();
+  });
+
+  render();
+</script>
+</body>
+</html>
