@@ -7,7 +7,13 @@ Offline.
 Batch processing.
 Original resolution.
 
-<img width="1919" height="872" alt="image" src="https://github.com/user-attachments/assets/c3fbfa0d-283b-49a0-a823-5ec9782765bc" />
+<img width="1919" height="1079" alt="image" src="https://github.com/user-attachments/assets/6fbb4d36-be21-469e-9ce1-a5b291780a19" />
+
+
+<img width="1916" height="1078" alt="image" src="https://github.com/user-attachments/assets/54740a35-01af-4fa4-a4ce-a2bdd7900580" />
+
+<img width="1911" height="1071" alt="image" src="https://github.com/user-attachments/assets/da91f974-c159-4fec-b5d2-29a291957319" />
+
 
 ## Features
 
