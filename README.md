@@ -28,6 +28,14 @@ Original resolution.
 
 Try it on [itch.io](https://pixbob.itch.io/pixbob-cutout-free-background-remover)
 
+## Credits
+
+Background removal is powered by:
+
+@imgly/background-removal
+
+https://github.com/imgly/background-removal-js
+
 ## License
 
 This project uses the open-source @imgly/background-removal library licensed under AGPL v3.
