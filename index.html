@@ -484,6 +484,107 @@
 
   <footer>AI model downloads once to your browser (~5s initially) and stays cached for future offline use.</footer>
 
+<!-- ============================================================
+  ADSENSE MONKEY PATCH — Sticky LEFT / RIGHT sidebar ads
+  ------------------------------------------------------------
+  HOW TO ENABLE:
+  1) In 'AD_CONFIG' below, paste your AdSense publisher ID
+     into client  (looks like: ca-pub-1234567890123456).
+  2) Create TWO "automatic"/responsive ad units in your
+     AdSense dashboard, then paste each SLOT ID into
+     leftSlot and rightSlot.
+  3) Save & refresh. Ads appear as sticky rails on wide
+     desktop screens and auto-hide on mobile/narrow windows.
+  ============================================================ -->
+<script>
+(function () {
+  /* ---------- CONFIGURE ADSENSE HERE ---------- */
+  var ADG = {
+    client:    'ca-pub-XXXXXXXXXXXXXXXX',  /* your publisher ID  */
+    leftSlot:  '0000000000',               /* LEFT  sidebar ad unit slot ID */
+    rightSlot: '0000000000',               /* RIGHT sidebar ad unit slot ID */
+    adWidth:   240,                        /* px wide each sidebar rail  */
+    minWidth:  1400,                       /* only show rails on screens wider than this */
+    label:     'Sponsored'                 /* small text shown above each ad */
+  };
+  /* ------------------------------------------- */
+
+  var configured = (ADG.client.indexOf('XX') === -1);  /* real IDs pasted? */
+
+  function makeRail(side, slot) {
+    var rail = document.createElement('aside');
+    rail.id = side === 'l' ? 'adRailLeft' : 'adRailRight';
+    rail.setAttribute('data-slotid', slot);
+    return rail;
+  }
+  var left  = makeRail('l', ADG.leftSlot);
+  var right = makeRail('r', ADG.rightSlot);
+
+  var markupTxt = '<span class="ad-rail-label">' + ADG.label + '</span>';
+  left.innerHTML = markupTxt;
+  right.innerHTML = markupTxt;
+
+  if (configured) {
+    var place = function (host, slot) {
+      var ins = document.createElement('ins');
+      ins.className = 'adsbygoogle';
+      ins.style.display = 'block';
+      ins.dataset.adClient   = ADG.client;
+      ins.dataset.adSlot     = slot;
+      ins.dataset.adFormat   = 'auto';
+      ins.dataset.fullWidthResponsive = 'true';
+      host.appendChild(ins);
+    };
+    place(left,  ADG.leftSlot);
+    place(right, ADG.rightSlot);
+
+    if (!window.__adSenseLoaderInjected) {
+      window.__adSenseLoaderInjected = true;
+      var s = document.createElement('script');
+      s.async = true;
+      s.src = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=' + encodeURIComponent(ADG.client);
+      s.crossOrigin = 'anonymous';
+      (document.head || document.documentElement).appendChild(s);
+    }
+  }
+
+  /* Styles injected here so the base app CSS stays untouched (monkey-patch). */
+  var css = document.createElement('style');
+  css.textContent =
+    '#adRailLeft,#adRailRight{' +
+      'position:fixed;top:0;bottom:0;width:' + ADG.adWidth + 'px;' +
+      'display:flex;flex-direction:column;align-items:center;justify-content:center;' +
+      'background:rgba(13,15,13,.95);padding:10px;z-index:50;' +
+    '}' +
+    '#adRailLeft{left:0;border-right:1px solid #262c26;}' +
+    '#adRailRight{right:0;border-left:1px solid #262c26;}' +
+    '.ad-rail-label{font-size:9px;letter-spacing:.14em;text-transform:uppercase;' +
+      'color:#8a9086;margin-bottom:6px;}' +
+    '.ad-rail{width:100%;}' +
+    '.adsbygoogle{display:block;min-height:600px;}';
+  (document.head || document.documentElement).appendChild(css);
+
+  document.body.appendChild(left);
+  document.body.appendChild(right);
+
+  var apply = function () {
+    var show = window.innerWidth >= ADG.minWidth;
+    left.style.display  = show ? 'flex' : 'none';
+    right.style.display = show ? 'flex' : 'none';
+  };
+  apply();
+  window.addEventListener('resize', apply);
+
+  /* Push the ad request once the AdSense script has had a chance to load. */
+  setTimeout(function () {
+    if (!configured) return;
+    var i, adsArr = document.querySelectorAll('ins.adsbygoogle');
+    for (i = 0; i < adsArr.length; i++) {
+      try { (window.adsbygoogle = window.adsbygoogle || []).push({}); } catch (e) {}
+    }
+  }, 400);
+})();
+</script>
 <script type="module">
   const stage = document.getElementById('stage');
   const dropzone = document.getElementById('dropzone');
